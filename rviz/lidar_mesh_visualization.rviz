@@ -175,6 +175,30 @@ Visualization Manager:
       Use Timestamp: false
       Value: true
 
+    - Class: rviz/Camera
+      Enabled: true
+      Image Rendering: background and overlay
+      Image Topic: /hsrb/head_rgbd_sensor/rgb/image_rect_color
+      Name: Camera
+      Overlay Alpha: 0.5
+      Queue Size: 2
+      Transport Hint: raw
+      Unreliable: false
+      Value: true
+      Visibility:
+        DetectedLines: true
+        Grid: true
+        HoughGrid: true
+        LaserScan: true
+        Map: true
+        Mesh: true
+        MeshTriangles: true
+        PointCloud2: true
+        RobotModel: true
+        TF: true
+        Value: true
+      Zoom Factor: 1
+
     - Class: rviz/TF
       Enabled: true
       Frame Timeout: 15
