@@ -4,54 +4,27 @@ project(csc647-final-project)
 ## Find catkin and required packages
 find_package(catkin REQUIRED COMPONENTS
   rospy
-  roscpp
   std_msgs
   sensor_msgs
   geometry_msgs
   visualization_msgs
   nav_msgs
-  pcl_ros
-  pcl_conversions
   tf
-  tf2_ros
 )
-
-## Find PCL
-find_package(PCL REQUIRED)
 
 ###################################
 ## catkin specific configuration ##
 ###################################
 catkin_package(
-  INCLUDE_DIRS include
   CATKIN_DEPENDS
     rospy
-    roscpp
     std_msgs
     sensor_msgs
     geometry_msgs
     visualization_msgs
     nav_msgs
-    pcl_ros
-    pcl_conversions
     tf
-    tf2_ros
-  DEPENDS PCL
 )
-
-###########
-## Build ##
-###########
-
-## Specify additional locations of header files
-include_directories(
-  include
-  ${catkin_INCLUDE_DIRS}
-  ${PCL_INCLUDE_DIRS}
-)
-
-link_directories(${PCL_LIBRARY_DIRS})
-add_definitions(${PCL_DEFINITIONS})
 
 #############
 ## Install ##
