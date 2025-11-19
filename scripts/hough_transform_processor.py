@@ -240,6 +240,9 @@ class HoughTransformProcessor:
             marker.type = Marker.LINE_STRIP
             marker.action = Marker.ADD
 
+            # Initialize orientation (fix quaternion warning)
+            marker.pose.orientation.w = 1.0
+
             # Line properties
             marker.scale.x = 0.05  # Line width
 

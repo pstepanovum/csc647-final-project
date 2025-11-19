@@ -145,7 +145,10 @@ class PointCloudToMesh:
 
     def generate_mesh_marker(self, points, header):
         """
-        Generate mesh marker using Delaunay triangulation.
+        Generate mesh marker from 2D LiDAR scan by creating vertical wall planes.
+
+        Since HSR LiDAR is 2D planar (horizontal scan), we extrude the scan
+        points vertically to create wall-like surfaces.
 
         Args:
             points (numpy.ndarray): Input points
@@ -161,6 +164,12 @@ class PointCloudToMesh:
         marker.type = Marker.TRIANGLE_LIST
         marker.action = Marker.ADD
 
+        # Initialize orientation (fix quaternion error!)
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
+
         # Scale
         marker.scale.x = 1.0
         marker.scale.y = 1.0
@@ -169,78 +178,73 @@ class PointCloudToMesh:
         # Color
         marker.color = self.mesh_color
 
-        rospy.loginfo(f"Generating mesh from {len(points)} points")
+        rospy.loginfo(f"Generating vertical wall mesh from {len(points)} 2D scan points")
 
-        # Remove duplicate points for better triangulation
-        points_unique = np.unique(points, axis=0)
-        rospy.loginfo(f"After removing duplicates: {len(points_unique)} unique points")
-
-        if len(points_unique) < 3:
-            rospy.logwarn(f"Not enough unique points for triangulation: {len(points_unique)}")
+        if len(points) < 2:
+            rospy.logwarn("Not enough points for mesh generation")
             return marker
 
-        # Project to 2D (x, y) for triangulation
-        points_2d = points_unique[:, :2]
+        # For 2D LiDAR, we create vertical wall segments
+        # Each consecutive pair of scan points becomes a vertical rectangle
 
-        # Check if points are collinear (all on same line)
-        if len(points_2d) >= 3:
-            # Compute area of convex hull - if near zero, points are collinear
-            from scipy.spatial import ConvexHull
-            try:
-                hull = ConvexHull(points_2d)
-                if hull.volume < 0.01:  # Very small area
-                    rospy.logwarn("Points are nearly collinear, cannot triangulate")
-                    return marker
-            except Exception as e:
-                rospy.logwarn(f"ConvexHull check failed: {e}")
-                return marker
+        wall_height = 2.0  # Height of wall planes (meters)
+        min_segment_length = 0.05  # Minimum distance between points
+        max_segment_length = 0.5   # Maximum gap to connect points
 
-        try:
-            # Perform Delaunay triangulation
-            tri = Delaunay(points_2d)
-            rospy.loginfo(f"Delaunay created {len(tri.simplices)} triangles")
+        triangle_count = 0
+        max_triangles = 500
 
-            # Limit number of triangles for performance
-            max_triangles = 500
-            triangle_count = 0
+        # Sort points by angle around robot for proper ordering
+        angles = np.arctan2(points[:, 1], points[:, 0])
+        sorted_indices = np.argsort(angles)
+        points_sorted = points[sorted_indices]
 
-            # Add triangles to marker
-            for simplex in tri.simplices:
-                if triangle_count >= max_triangles:
-                    break
+        # Create vertical wall segments between consecutive points
+        for i in range(len(points_sorted) - 1):
+            if triangle_count >= max_triangles:
+                break
 
-                # Get the three vertices of the triangle
-                p1 = points_unique[simplex[0]]
-                p2 = points_unique[simplex[1]]
-                p3 = points_unique[simplex[2]]
+            p1 = points_sorted[i]
+            p2 = points_sorted[i + 1]
 
-                # Filter out very large triangles (likely spurious)
-                edge1 = np.linalg.norm(p1 - p2)
-                edge2 = np.linalg.norm(p2 - p3)
-                edge3 = np.linalg.norm(p3 - p1)
-                max_edge = max(edge1, edge2, edge3)
+            # Distance between points
+            segment_length = np.linalg.norm(p2[:2] - p1[:2])
 
-                if max_edge > 2.0:  # Skip triangles with edges > 2 meters
-                    continue
+            # Skip if points are too close or too far apart
+            if segment_length < min_segment_length or segment_length > max_segment_length:
+                continue
 
-                # Add triangle vertices
-                marker.points.append(Point(p1[0], p1[1], p1[2]))
-                marker.points.append(Point(p2[0], p2[1], p2[2]))
-                marker.points.append(Point(p3[0], p3[1], p3[2]))
+            # Create 4 vertices for a vertical rectangular wall segment
+            # Bottom two points (at LiDAR height, z=0)
+            v1_bottom = Point(p1[0], p1[1], 0.0)
+            v2_bottom = Point(p2[0], p2[1], 0.0)
 
-                # Add colors for each vertex
-                marker.colors.append(self.mesh_color)
-                marker.colors.append(self.mesh_color)
-                marker.colors.append(self.mesh_color)
+            # Top two points (extruded upward)
+            v1_top = Point(p1[0], p1[1], wall_height)
+            v2_top = Point(p2[0], p2[1], wall_height)
 
-                triangle_count += 1
+            # Create two triangles to form the rectangle
+            # Triangle 1: bottom-left, bottom-right, top-right
+            marker.points.append(v1_bottom)
+            marker.points.append(v2_bottom)
+            marker.points.append(v2_top)
 
-            rospy.loginfo(f"Added {triangle_count} triangles to mesh marker")
+            marker.colors.append(self.mesh_color)
+            marker.colors.append(self.mesh_color)
+            marker.colors.append(self.mesh_color)
 
-        except Exception as e:
-            rospy.logerr(f"Delaunay triangulation failed: {e}")
-            import traceback
-            traceback.print_exc()
+            # Triangle 2: bottom-left, top-right, top-left
+            marker.points.append(v1_bottom)
+            marker.points.append(v2_top)
+            marker.points.append(v1_top)
+
+            marker.colors.append(self.mesh_color)
+            marker.colors.append(self.mesh_color)
+            marker.colors.append(self.mesh_color)
+
+            triangle_count += 2
+
+        rospy.loginfo(f"Created {triangle_count} triangles forming vertical wall segments")
 
         return marker
 
@@ -270,6 +274,9 @@ class PointCloudToMesh:
                 marker.id = i
                 marker.type = Marker.LINE_STRIP
                 marker.action = Marker.ADD
+
+                # Initialize orientation
+                marker.pose.orientation.w = 1.0
 
                 marker.scale.x = 0.01  # Line width
                 marker.color = ColorRGBA(1.0, 0.0, 0.0, 1.0)  # Red edges
