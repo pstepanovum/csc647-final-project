@@ -202,16 +202,16 @@ class PointCloudToMesh:
             return marker
 
         # For 3D camera point clouds, create mesh by connecting nearby points
-        max_edge_length = 0.4  # Maximum distance between connected points
-        max_triangles = 3000  # More triangles for better coverage
+        max_edge_length = 0.6  # INCREASED: Maximum distance between connected points
+        max_triangles = 5000  # INCREASED: More triangles for better coverage
         triangle_count = 0
 
         # Build a KD-tree for efficient nearest neighbor search
         from scipy.spatial import cKDTree
         tree = cKDTree(points)
 
-        # Sample more points for denser mesh
-        step = max(1, len(points) // 1000)  # Sample ~1000 points
+        # Sample more points for MUCH denser mesh
+        step = max(1, len(points) // 2000)  # Sample ~2000 points (was 1000)
         sample_points = points[::step]
 
         # Calculate colors based on height (Z coordinate)
@@ -260,28 +260,33 @@ class PointCloudToMesh:
             # If normal is horizontal (small Z component), it's vertical (wall)
             is_horizontal = abs(normal[2]) > 0.7  # cos(45°) ≈ 0.7
 
-            # Color based on surface type and height
+            # Color based on surface type and height - BRIGHT COLORS!
             if is_horizontal:
-                # Horizontal surfaces (floors/tables) - use height-based color
+                # Horizontal surfaces (floors/tables) - use height-based bright colors
                 avg_z = (p0[2] + p1[2] + p2[2]) / 3.0
                 height_ratio = (avg_z - z_min) / z_range
 
                 if normal[2] > 0:  # Floor (normal points up)
-                    # Green gradient for floors
-                    color = ColorRGBA(0.2, 0.3 + 0.5 * height_ratio, 0.2, 0.9)
+                    # Bright green for floors
+                    color = ColorRGBA(0.1, 0.9, 0.1, 1.0)
                 else:  # Ceiling (normal points down)
-                    # Blue gradient for ceilings
-                    color = ColorRGBA(0.2, 0.3, 0.5 + 0.5 * height_ratio, 0.9)
+                    # Bright blue for ceilings
+                    color = ColorRGBA(0.2, 0.4, 1.0, 1.0)
             else:
-                # Vertical surfaces (walls) - cyan/orange gradient
+                # Vertical surfaces (walls) - bright varied colors by height
                 avg_z = (p0[2] + p1[2] + p2[2]) / 3.0
                 height_ratio = (avg_z - z_min) / z_range
 
-                # Walls: cyan at bottom, orange at top
-                r = 0.1 + 0.8 * height_ratio
-                g = 0.6
-                b = 0.9 - 0.6 * height_ratio
-                color = ColorRGBA(r, g, b, 0.9)
+                # Walls: bright colors - red to yellow to cyan gradient
+                if height_ratio < 0.33:
+                    # Bottom third: Bright red
+                    color = ColorRGBA(1.0, 0.2, 0.2, 1.0)
+                elif height_ratio < 0.66:
+                    # Middle third: Bright yellow
+                    color = ColorRGBA(1.0, 1.0, 0.2, 1.0)
+                else:
+                    # Top third: Bright cyan
+                    color = ColorRGBA(0.2, 1.0, 1.0, 1.0)
 
             # Add triangle with per-vertex colors
             marker.points.append(Point(p0[0], p0[1], p0[2]))

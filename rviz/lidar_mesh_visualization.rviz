@@ -142,7 +142,7 @@ Visualization Manager:
       Marker Topic: /lidar/mesh
       Name: Mesh
       Namespaces:
-        {}
+        lidar_mesh_3d: true
       Queue Size: 100
       Value: true
 
