@@ -18,8 +18,8 @@
 
   <!-- Point Cloud to Mesh Converter -->
   <node name="point_cloud_to_mesh" pkg="csc647-final-project" type="point_cloud_to_mesh.py" output="screen">
-    <param name="voxel_size" value="0.03" />  <!-- Reduced from 0.05 for better detail -->
-    <param name="max_distance" value="3.5" />  <!-- Increased from 3.0 for larger view -->
+    <param name="voxel_size" value="0.025" />  <!-- Reduced to 0.025 for more detail -->
+    <param name="max_distance" value="6.0" />  <!-- Increased to 6.0m for sophisticated wide-range view -->
     <param name="mesh_alpha" value="1.0" />
     <param name="use_3d_camera" value="true" />  <!-- Use RGB-D camera for true 3D meshes! -->
   </node>
