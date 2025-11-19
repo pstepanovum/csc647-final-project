@@ -169,19 +169,59 @@ class PointCloudToMesh:
         # Color
         marker.color = self.mesh_color
 
+        rospy.loginfo(f"Generating mesh from {len(points)} points")
+
+        # Remove duplicate points for better triangulation
+        points_unique = np.unique(points, axis=0)
+        rospy.loginfo(f"After removing duplicates: {len(points_unique)} unique points")
+
+        if len(points_unique) < 3:
+            rospy.logwarn(f"Not enough unique points for triangulation: {len(points_unique)}")
+            return marker
+
         # Project to 2D (x, y) for triangulation
-        points_2d = points[:, :2]
+        points_2d = points_unique[:, :2]
+
+        # Check if points are collinear (all on same line)
+        if len(points_2d) >= 3:
+            # Compute area of convex hull - if near zero, points are collinear
+            from scipy.spatial import ConvexHull
+            try:
+                hull = ConvexHull(points_2d)
+                if hull.volume < 0.01:  # Very small area
+                    rospy.logwarn("Points are nearly collinear, cannot triangulate")
+                    return marker
+            except Exception as e:
+                rospy.logwarn(f"ConvexHull check failed: {e}")
+                return marker
 
         try:
             # Perform Delaunay triangulation
             tri = Delaunay(points_2d)
+            rospy.loginfo(f"Delaunay created {len(tri.simplices)} triangles")
+
+            # Limit number of triangles for performance
+            max_triangles = 500
+            triangle_count = 0
 
             # Add triangles to marker
             for simplex in tri.simplices:
+                if triangle_count >= max_triangles:
+                    break
+
                 # Get the three vertices of the triangle
-                p1 = points[simplex[0]]
-                p2 = points[simplex[1]]
-                p3 = points[simplex[2]]
+                p1 = points_unique[simplex[0]]
+                p2 = points_unique[simplex[1]]
+                p3 = points_unique[simplex[2]]
+
+                # Filter out very large triangles (likely spurious)
+                edge1 = np.linalg.norm(p1 - p2)
+                edge2 = np.linalg.norm(p2 - p3)
+                edge3 = np.linalg.norm(p3 - p1)
+                max_edge = max(edge1, edge2, edge3)
+
+                if max_edge > 2.0:  # Skip triangles with edges > 2 meters
+                    continue
 
                 # Add triangle vertices
                 marker.points.append(Point(p1[0], p1[1], p1[2]))
@@ -193,8 +233,14 @@ class PointCloudToMesh:
                 marker.colors.append(self.mesh_color)
                 marker.colors.append(self.mesh_color)
 
+                triangle_count += 1
+
+            rospy.loginfo(f"Added {triangle_count} triangles to mesh marker")
+
         except Exception as e:
-            rospy.logwarn(f"Delaunay triangulation failed: {e}")
+            rospy.logerr(f"Delaunay triangulation failed: {e}")
+            import traceback
+            traceback.print_exc()
 
         return marker
 
