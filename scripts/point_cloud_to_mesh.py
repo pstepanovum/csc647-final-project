@@ -177,6 +177,9 @@ class PointCloudToMesh:
         """
         marker = Marker()
         marker.header = header
+        # Override frame to use head_rgbd_sensor_link which exists in TF
+        # The point cloud says rgb_frame but that doesn't exist in TF tree
+        marker.header.frame_id = "head_rgbd_sensor_link"
         marker.ns = "lidar_mesh_3d"
         marker.id = 0
         marker.type = Marker.TRIANGLE_LIST
