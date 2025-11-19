@@ -282,26 +282,41 @@ class PointCloudToMesh:
             # Determine surface type
             is_horizontal = abs(normal[2]) > 0.7
 
-            # IMPROVED COLORING: 4-tier gradient for walls
+            # ═══════════════════════════════════════════════════════════════
+            # COLOR CODING SCHEME (Computational Geometry Visualization)
+            # ═══════════════════════════════════════════════════════════════
+            # Surface classification based on normal vector analysis:
+            # - Horizontal surfaces: |normal.z| > 0.7 (angle < 45°)
+            # - Vertical surfaces: |normal.z| ≤ 0.7 (walls)
+            # ═══════════════════════════════════════════════════════════════
             avg_z = (p0[2] + p1[2] + p2[2]) / 3.0
             height_ratio = (avg_z - z_min) / z_range if z_range > 0 else 0.5
 
             if is_horizontal:
-                if normal[2] > 0:  # Floor
-                    # Green with height variation
+                # HORIZONTAL SURFACES (|normal.z| > 0.7)
+                if normal[2] > 0:  # Normal vector points UPWARD
+                    # ███ GREEN: Floors, tables, platforms (walkable surfaces)
+                    # Intensity gradient: darker=lower elevation, brighter=higher
                     intensity = 0.7 + 0.3 * height_ratio
                     color = ColorRGBA(0.1, intensity, 0.1, 1.0)
-                else:  # Ceiling
+                else:  # Normal vector points DOWNWARD
+                    # ███ BLUE: Ceilings, overhangs, top surfaces
                     color = ColorRGBA(0.3, 0.5, 1.0, 1.0)
-            else:  # Walls - 4-tier color gradient
+            else:
+                # VERTICAL SURFACES (|normal.z| ≤ 0.7) - Walls
+                # 4-tier HEIGHT-BASED gradient (rainbow encoding for depth):
                 if height_ratio < 0.25:
-                    color = ColorRGBA(1.0, 0.1, 0.1, 1.0)  # Bright Red (bottom)
+                    # ███ RED: Bottom 25% (~0.0-0.7m) - Floor level, baseboards
+                    color = ColorRGBA(1.0, 0.1, 0.1, 1.0)
                 elif height_ratio < 0.5:
-                    color = ColorRGBA(1.0, 0.65, 0.1, 1.0)  # Orange
+                    # ███ ORANGE: 25-50% (~0.7-1.5m) - Waist/table height
+                    color = ColorRGBA(1.0, 0.65, 0.1, 1.0)
                 elif height_ratio < 0.75:
-                    color = ColorRGBA(1.0, 1.0, 0.1, 1.0)  # Yellow
+                    # ███ YELLOW: 50-75% (~1.5-2.2m) - Eye/door height
+                    color = ColorRGBA(1.0, 1.0, 0.1, 1.0)
                 else:
-                    color = ColorRGBA(0.1, 0.9, 0.9, 1.0)  # Cyan (top)
+                    # ███ CYAN: Top 25% (~2.2-3.0m) - Upper walls near ceiling
+                    color = ColorRGBA(0.1, 0.9, 0.9, 1.0)
 
             # Add triangle
             marker.points.append(Point(p0[0], p0[1], p0[2]))

@@ -180,22 +180,22 @@ Visualization Manager:
       Image Rendering: background and overlay
       Image Topic: /hsrb/head_rgbd_sensor/rgb/image_rect_color
       Name: Camera
-      Overlay Alpha: 0.5
+      Overlay Alpha: 0.3
       Queue Size: 2
       Transport Hint: raw
       Unreliable: false
       Value: true
       Visibility:
         DetectedLines: true
-        Grid: true
-        HoughGrid: true
-        LaserScan: true
-        Map: true
+        Grid: false
+        HoughGrid: false
+        LaserScan: false
+        Map: false
         Mesh: true
         MeshTriangles: true
-        PointCloud2: true
-        RobotModel: true
-        TF: true
+        PointCloud2: false
+        RobotModel: false
+        TF: false
         Value: true
       Zoom Factor: 1
 
