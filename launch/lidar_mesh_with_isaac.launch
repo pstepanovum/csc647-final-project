@@ -18,9 +18,10 @@
 
   <!-- Point Cloud to Mesh Converter -->
   <node name="point_cloud_to_mesh" pkg="csc647-final-project" type="point_cloud_to_mesh.py" output="screen">
-    <param name="voxel_size" value="0.1" />
-    <param name="max_distance" value="10.0" />
+    <param name="voxel_size" value="0.02" />
+    <param name="max_distance" value="3.0" />
     <param name="mesh_alpha" value="1.0" />
+    <param name="use_3d_camera" value="true" />  <!-- Use RGB-D camera for true 3D meshes! -->
   </node>
 
   <!-- Hough Transform Processor -->

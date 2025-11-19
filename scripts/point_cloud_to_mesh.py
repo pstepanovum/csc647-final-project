@@ -35,13 +35,25 @@ class PointCloudToMesh:
         self.voxel_size = rospy.get_param('~voxel_size', 0.05)  # Voxel grid size for downsampling
         self.max_distance = rospy.get_param('~max_distance', 5.0)  # Max distance for mesh generation
         self.mesh_alpha = rospy.get_param('~mesh_alpha', 0.7)  # Mesh transparency
+        self.use_3d_camera = rospy.get_param('~use_3d_camera', True)  # Use RGB-D camera point cloud
 
         # Publishers
         self.mesh_pub = rospy.Publisher('/lidar/mesh', Marker, queue_size=10)
         self.triangles_pub = rospy.Publisher('/lidar/mesh_triangles', MarkerArray, queue_size=10)
 
-        # Subscriber
-        self.cloud_sub = rospy.Subscriber('/lidar/point_cloud', PointCloud2, self.cloud_callback)
+        # Subscribers - support both 2D LiDAR and 3D camera point clouds
+        if self.use_3d_camera:
+            # Subscribe to RGB-D camera point cloud (TRUE 3D!)
+            self.cloud_sub = rospy.Subscriber(
+                '/hsrb/head_rgbd_sensor/depth_registered/rectified_points',
+                PointCloud2,
+                self.cloud_callback
+            )
+            rospy.loginfo("Using RGB-D camera 3D point cloud for mesh generation")
+        else:
+            # Subscribe to converted 2D LiDAR point cloud
+            self.cloud_sub = rospy.Subscriber('/lidar/point_cloud', PointCloud2, self.cloud_callback)
+            rospy.loginfo("Using 2D LiDAR point cloud for mesh generation")
 
         # Mesh color
         self.mesh_color = ColorRGBA(0.0, 0.7, 1.0, self.mesh_alpha)  # Cyan
@@ -77,15 +89,21 @@ class PointCloudToMesh:
             if len(points) < 3:
                 return
 
-            # Generate mesh using Delaunay triangulation
-            mesh_marker = self.generate_mesh_marker(points, cloud_msg.header)
+            # Detect if this is 3D or 2D planar data
+            z_range = np.max(points[:, 2]) - np.min(points[:, 2])
+            is_3d = z_range > 0.1  # If Z variation > 10cm, it's 3D data
+
+            if is_3d:
+                rospy.loginfo_throttle(5.0, f"Processing 3D point cloud (Z range: {z_range:.2f}m)")
+                # For 3D data, use proper 3D mesh generation
+                mesh_marker = self.generate_3d_mesh_marker(points, cloud_msg.header)
+            else:
+                rospy.loginfo_throttle(5.0, f"Processing 2D planar data (Z range: {z_range:.2f}m)")
+                # For 2D data, use vertical extrusion
+                mesh_marker = self.generate_mesh_marker(points, cloud_msg.header)
 
             # Publish mesh
             self.mesh_pub.publish(mesh_marker)
-
-            # Generate and publish triangle markers
-            triangle_markers = self.generate_triangle_markers(points, cloud_msg.header)
-            self.triangles_pub.publish(triangle_markers)
 
         except Exception as e:
             rospy.logerr(f"Error generating mesh: {e}")
@@ -142,6 +160,97 @@ class PointCloudToMesh:
         _, unique_indices = np.unique(voxel_indices, axis=0, return_index=True)
 
         return points[unique_indices]
+
+    def generate_3d_mesh_marker(self, points, header):
+        """
+        Generate mesh from TRUE 3D point cloud (e.g., RGB-D camera).
+
+        Uses organized grid structure of camera point clouds to create
+        triangular mesh surfaces.
+
+        Args:
+            points (numpy.ndarray): Input 3D points
+            header (std_msgs/Header): Message header
+
+        Returns:
+            visualization_msgs/Marker: Mesh marker
+        """
+        marker = Marker()
+        marker.header = header
+        marker.ns = "lidar_mesh_3d"
+        marker.id = 0
+        marker.type = Marker.TRIANGLE_LIST
+        marker.action = Marker.ADD
+
+        # Initialize orientation
+        marker.pose.orientation.w = 1.0
+
+        # Scale
+        marker.scale.x = 1.0
+        marker.scale.y = 1.0
+        marker.scale.z = 1.0
+
+        # Color
+        marker.color = self.mesh_color
+
+        rospy.loginfo(f"Generating 3D mesh from {len(points)} points")
+
+        if len(points) < 4:
+            rospy.logwarn("Not enough points for 3D mesh")
+            return marker
+
+        # For 3D camera point clouds, create mesh by connecting nearby points
+        # Use a simple greedy triangulation approach
+
+        max_edge_length = 0.3  # Maximum distance between connected points
+        max_triangles = 1000
+        triangle_count = 0
+
+        # Build a KD-tree for efficient nearest neighbor search
+        from scipy.spatial import cKDTree
+        tree = cKDTree(points)
+
+        # Sample subset of points as triangle centers
+        step = max(1, len(points) // 200)  # Sample ~200 points
+        sample_points = points[::step]
+
+        for center_point in sample_points:
+            if triangle_count >= max_triangles:
+                break
+
+            # Find 3 nearest neighbors
+            distances, indices = tree.query(center_point, k=4)  # k=4 to skip self
+
+            # Skip first index (self), use next 3
+            if len(indices) < 4:
+                continue
+
+            p0 = points[indices[1]]
+            p1 = points[indices[2]]
+            p2 = points[indices[3]]
+
+            # Check edge lengths - skip if any edge is too long
+            edge1 = np.linalg.norm(p1 - p0)
+            edge2 = np.linalg.norm(p2 - p1)
+            edge3 = np.linalg.norm(p0 - p2)
+
+            if max(edge1, edge2, edge3) > max_edge_length:
+                continue
+
+            # Add triangle
+            marker.points.append(Point(p0[0], p0[1], p0[2]))
+            marker.points.append(Point(p1[0], p1[1], p1[2]))
+            marker.points.append(Point(p2[0], p2[1], p2[2]))
+
+            marker.colors.append(self.mesh_color)
+            marker.colors.append(self.mesh_color)
+            marker.colors.append(self.mesh_color)
+
+            triangle_count += 1
+
+        rospy.loginfo(f"Created {triangle_count} 3D triangles")
+
+        return marker
 
     def generate_mesh_marker(self, points, header):
         """
