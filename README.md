@@ -55,18 +55,14 @@ hsr_lidar_mesh/
 
 ## 📥 Installation
 
-### 1. Clone the Repository
+### For CSC 647 Students (Standard Setup)
+
+This package is located at: `~/hsr_robocanes_omniverse/src/csc647-final-project`
+
+### 1. Navigate to Package Directory
 
 ```bash
-# Navigate to your catkin workspace
-cd ~/catkin_ws/src
-
-# Clone this repository
-git clone <repository-url> hsr_lidar_mesh
-
-# Or if already cloned to csc647-final-project:
-# Create a symbolic link or copy the package
-ln -s ~/path/to/csc647-final-project ~/catkin_ws/src/hsr_lidar_mesh
+cd ~/hsr_robocanes_omniverse/src/csc647-final-project
 ```
 
 ### 2. Install Dependencies
@@ -82,12 +78,19 @@ sudo apt-get install -y \
     python3-numpy \
     python3-scipy
 
-# Install Python dependencies
-cd ~/catkin_ws/src/hsr_lidar_mesh
+# Install Python dependencies (make sure you're in csc647-final-project directory)
+cd ~/hsr_robocanes_omniverse/src/csc647-final-project
 pip3 install -r requirements.txt
 ```
 
-### 3. Build the Package
+### 3. Create Symbolic Link in Catkin Workspace
+
+```bash
+# Create symbolic link so ROS can find the package
+ln -s ~/hsr_robocanes_omniverse/src/csc647-final-project ~/catkin_ws/src/hsr_lidar_mesh
+```
+
+### 4. Build the Package
 
 ```bash
 # Navigate to workspace root
