@@ -202,8 +202,8 @@ class PointCloudToMesh:
         # For 3D camera point clouds, create mesh by connecting nearby points
         # Use a simple greedy triangulation approach
 
-        max_edge_length = 0.3  # Maximum distance between connected points
-        max_triangles = 1000
+        max_edge_length = 0.5  # Maximum distance between connected points (increased from 0.3)
+        max_triangles = 2000  # Increased from 1000
         triangle_count = 0
 
         # Build a KD-tree for efficient nearest neighbor search
@@ -211,7 +211,7 @@ class PointCloudToMesh:
         tree = cKDTree(points)
 
         # Sample subset of points as triangle centers
-        step = max(1, len(points) // 200)  # Sample ~200 points
+        step = max(1, len(points) // 500)  # Sample ~500 points (increased from 200)
         sample_points = points[::step]
 
         for center_point in sample_points:
