@@ -166,7 +166,7 @@ class PointCloudToMesh:
         Generate mesh from TRUE 3D point cloud (e.g., RGB-D camera).
 
         Uses organized grid structure of camera point clouds to create
-        triangular mesh surfaces.
+        triangular mesh surfaces with color variation.
 
         Args:
             points (numpy.ndarray): Input 3D points
@@ -190,8 +190,7 @@ class PointCloudToMesh:
         marker.scale.y = 1.0
         marker.scale.z = 1.0
 
-        # Color
-        marker.color = self.mesh_color
+        # Don't set marker.color - we'll use per-vertex colors instead!
 
         rospy.loginfo(f"Generating 3D mesh from {len(points)} points")
 
@@ -200,19 +199,24 @@ class PointCloudToMesh:
             return marker
 
         # For 3D camera point clouds, create mesh by connecting nearby points
-        # Use a simple greedy triangulation approach
-
-        max_edge_length = 0.5  # Maximum distance between connected points (increased from 0.3)
-        max_triangles = 2000  # Increased from 1000
+        max_edge_length = 0.4  # Maximum distance between connected points
+        max_triangles = 3000  # More triangles for better coverage
         triangle_count = 0
 
         # Build a KD-tree for efficient nearest neighbor search
         from scipy.spatial import cKDTree
         tree = cKDTree(points)
 
-        # Sample subset of points as triangle centers
-        step = max(1, len(points) // 500)  # Sample ~500 points (increased from 200)
+        # Sample more points for denser mesh
+        step = max(1, len(points) // 1000)  # Sample ~1000 points
         sample_points = points[::step]
+
+        # Calculate colors based on height (Z coordinate)
+        z_min = np.min(points[:, 2])
+        z_max = np.max(points[:, 2])
+        z_range = z_max - z_min if z_max > z_min else 1.0
+
+        rospy.loginfo(f"Height range: {z_min:.2f}m to {z_max:.2f}m (range: {z_range:.2f}m)")
 
         for center_point in sample_points:
             if triangle_count >= max_triangles:
@@ -237,18 +241,58 @@ class PointCloudToMesh:
             if max(edge1, edge2, edge3) > max_edge_length:
                 continue
 
-            # Add triangle
+            # Calculate surface normal to determine if it's vertical or horizontal
+            v1 = p1 - p0
+            v2 = p2 - p0
+            normal = np.cross(v1, v2)
+            normal_mag = np.linalg.norm(normal)
+
+            if normal_mag < 0.001:  # Degenerate triangle
+                continue
+
+            normal = normal / normal_mag
+
+            # Determine surface type based on normal
+            # If normal points up/down (large Z component), it's horizontal (floor/ceiling)
+            # If normal is horizontal (small Z component), it's vertical (wall)
+            is_horizontal = abs(normal[2]) > 0.7  # cos(45°) ≈ 0.7
+
+            # Color based on surface type and height
+            if is_horizontal:
+                # Horizontal surfaces (floors/tables) - use height-based color
+                avg_z = (p0[2] + p1[2] + p2[2]) / 3.0
+                height_ratio = (avg_z - z_min) / z_range
+
+                if normal[2] > 0:  # Floor (normal points up)
+                    # Green gradient for floors
+                    color = ColorRGBA(0.2, 0.3 + 0.5 * height_ratio, 0.2, 0.9)
+                else:  # Ceiling (normal points down)
+                    # Blue gradient for ceilings
+                    color = ColorRGBA(0.2, 0.3, 0.5 + 0.5 * height_ratio, 0.9)
+            else:
+                # Vertical surfaces (walls) - cyan/orange gradient
+                avg_z = (p0[2] + p1[2] + p2[2]) / 3.0
+                height_ratio = (avg_z - z_min) / z_range
+
+                # Walls: cyan at bottom, orange at top
+                r = 0.1 + 0.8 * height_ratio
+                g = 0.6
+                b = 0.9 - 0.6 * height_ratio
+                color = ColorRGBA(r, g, b, 0.9)
+
+            # Add triangle with per-vertex colors
             marker.points.append(Point(p0[0], p0[1], p0[2]))
             marker.points.append(Point(p1[0], p1[1], p1[2]))
             marker.points.append(Point(p2[0], p2[1], p2[2]))
 
-            marker.colors.append(self.mesh_color)
-            marker.colors.append(self.mesh_color)
-            marker.colors.append(self.mesh_color)
+            # All vertices get the same color for this triangle
+            marker.colors.append(color)
+            marker.colors.append(color)
+            marker.colors.append(color)
 
             triangle_count += 1
 
-        rospy.loginfo(f"Created {triangle_count} 3D triangles")
+        rospy.loginfo(f"Created {triangle_count} colored 3D triangles")
 
         return marker
 
