@@ -163,17 +163,26 @@ class PointCloudToMesh:
 
     def generate_3d_mesh_marker(self, points, header):
         """
-        Generate mesh from TRUE 3D point cloud (e.g., RGB-D camera).
+        Generate OPTIMIZED 3D mesh from RGB-D camera point cloud.
 
-        Uses organized grid structure of camera point clouds to create
-        triangular mesh surfaces with color variation.
+        Optimizations:
+        - Delaunay triangulation on 2D projection (XY plane) for speed
+        - Multi-criteria quality filtering (edge length, area, Z-variation)
+        - Smart sampling for optimal triangle density (3000 points)
+        - Adaptive coloring based on surface normals and height
+
+        Quality improvements:
+        - Removes degenerate triangles (min area threshold)
+        - Prevents spanning gaps (max edge length 0.35m)
+        - Avoids connecting different height levels (max Z-diff 0.4m)
+        - 4-tier color gradient for walls (red→orange→yellow→cyan)
 
         Args:
             points (numpy.ndarray): Input 3D points
             header (std_msgs/Header): Message header
 
         Returns:
-            visualization_msgs/Marker: Mesh marker
+            visualization_msgs/Marker: Optimized mesh marker with up to 10k triangles
         """
         marker = Marker()
         marker.header = header
@@ -201,42 +210,51 @@ class PointCloudToMesh:
             rospy.logwarn("Not enough points for 3D mesh")
             return marker
 
-        # For 3D camera point clouds, create mesh by connecting nearby points
-        max_edge_length = 0.6  # INCREASED: Maximum distance between connected points
-        max_triangles = 5000  # INCREASED: More triangles for better coverage
-        triangle_count = 0
-
-        # Build a KD-tree for efficient nearest neighbor search
-        from scipy.spatial import cKDTree
-        tree = cKDTree(points)
-
-        # Sample more points for MUCH denser mesh
-        step = max(1, len(points) // 2000)  # Sample ~2000 points (was 1000)
-        sample_points = points[::step]
-
-        # Calculate colors based on height (Z coordinate)
+        # OPTIMIZATION: Use Delaunay triangulation for MUCH better quality
+        # Calculate height range for coloring
         z_min = np.min(points[:, 2])
         z_max = np.max(points[:, 2])
         z_range = z_max - z_min if z_max > z_min else 1.0
-
         rospy.loginfo(f"Height range: {z_min:.2f}m to {z_max:.2f}m (range: {z_range:.2f}m)")
 
-        for center_point in sample_points:
+        # OPTIMIZATION 1: Smart sampling - keep more points for better quality
+        target_points = 3000  # Increased from 2000
+        if len(points) > target_points:
+            step = len(points) // target_points
+            sampled_points = points[::step]
+        else:
+            sampled_points = points
+
+        rospy.loginfo(f"Using {len(sampled_points)} points for triangulation")
+
+        # OPTIMIZATION 2: Use 2D Delaunay (MUCH faster than k-NN)
+        # Project to XY plane for triangulation
+        points_2d = sampled_points[:, :2]
+
+        try:
+            tri = Delaunay(points_2d)
+            rospy.loginfo(f"Delaunay created {len(tri.simplices)} candidate triangles")
+        except Exception as e:
+            rospy.logerr(f"Delaunay triangulation failed: {e}")
+            return marker
+
+        # QUALITY IMPROVEMENT: Filter triangles with multiple criteria
+        max_edge_length = 0.35  # Optimized - tighter for better quality
+        max_triangles = 10000  # Increased capacity
+        min_triangle_area = 0.0005  # Remove tiny degenerate triangles
+        max_z_variation = 0.4  # Don't span different height levels
+        triangle_count = 0
+
+        for simplex in tri.simplices:
             if triangle_count >= max_triangles:
                 break
 
-            # Find 3 nearest neighbors
-            distances, indices = tree.query(center_point, k=4)  # k=4 to skip self
+            # Get 3D coordinates
+            p0 = sampled_points[simplex[0]]
+            p1 = sampled_points[simplex[1]]
+            p2 = sampled_points[simplex[2]]
 
-            # Skip first index (self), use next 3
-            if len(indices) < 4:
-                continue
-
-            p0 = points[indices[1]]
-            p1 = points[indices[2]]
-            p2 = points[indices[3]]
-
-            # Check edge lengths - skip if any edge is too long
+            # QUALITY CHECK 1: Edge length (avoid spanning gaps)
             edge1 = np.linalg.norm(p1 - p0)
             edge2 = np.linalg.norm(p2 - p1)
             edge3 = np.linalg.norm(p0 - p2)
@@ -244,63 +262,58 @@ class PointCloudToMesh:
             if max(edge1, edge2, edge3) > max_edge_length:
                 continue
 
-            # Calculate surface normal to determine if it's vertical or horizontal
+            # QUALITY CHECK 2: Triangle area (avoid degenerate triangles)
             v1 = p1 - p0
             v2 = p2 - p0
-            normal = np.cross(v1, v2)
-            normal_mag = np.linalg.norm(normal)
+            cross = np.cross(v1, v2)
+            area = 0.5 * np.linalg.norm(cross)
 
-            if normal_mag < 0.001:  # Degenerate triangle
+            if area < min_triangle_area:
                 continue
 
-            normal = normal / normal_mag
+            # QUALITY CHECK 3: Z-variation (avoid spanning floors/walls)
+            z_diff = max(abs(p0[2] - p1[2]), abs(p1[2] - p2[2]), abs(p0[2] - p2[2]))
+            if z_diff > max_z_variation:
+                continue
 
-            # Determine surface type based on normal
-            # If normal points up/down (large Z component), it's horizontal (floor/ceiling)
-            # If normal is horizontal (small Z component), it's vertical (wall)
-            is_horizontal = abs(normal[2]) > 0.7  # cos(45°) ≈ 0.7
+            # Calculate normal (already have cross product)
+            normal = cross / (2.0 * area) if area > 0 else np.array([0, 0, 1])
 
-            # Color based on surface type and height - BRIGHT COLORS!
+            # Determine surface type
+            is_horizontal = abs(normal[2]) > 0.7
+
+            # IMPROVED COLORING: 4-tier gradient for walls
+            avg_z = (p0[2] + p1[2] + p2[2]) / 3.0
+            height_ratio = (avg_z - z_min) / z_range if z_range > 0 else 0.5
+
             if is_horizontal:
-                # Horizontal surfaces (floors/tables) - use height-based bright colors
-                avg_z = (p0[2] + p1[2] + p2[2]) / 3.0
-                height_ratio = (avg_z - z_min) / z_range
-
-                if normal[2] > 0:  # Floor (normal points up)
-                    # Bright green for floors
-                    color = ColorRGBA(0.1, 0.9, 0.1, 1.0)
-                else:  # Ceiling (normal points down)
-                    # Bright blue for ceilings
-                    color = ColorRGBA(0.2, 0.4, 1.0, 1.0)
-            else:
-                # Vertical surfaces (walls) - bright varied colors by height
-                avg_z = (p0[2] + p1[2] + p2[2]) / 3.0
-                height_ratio = (avg_z - z_min) / z_range
-
-                # Walls: bright colors - red to yellow to cyan gradient
-                if height_ratio < 0.33:
-                    # Bottom third: Bright red
-                    color = ColorRGBA(1.0, 0.2, 0.2, 1.0)
-                elif height_ratio < 0.66:
-                    # Middle third: Bright yellow
-                    color = ColorRGBA(1.0, 1.0, 0.2, 1.0)
+                if normal[2] > 0:  # Floor
+                    # Green with height variation
+                    intensity = 0.7 + 0.3 * height_ratio
+                    color = ColorRGBA(0.1, intensity, 0.1, 1.0)
+                else:  # Ceiling
+                    color = ColorRGBA(0.3, 0.5, 1.0, 1.0)
+            else:  # Walls - 4-tier color gradient
+                if height_ratio < 0.25:
+                    color = ColorRGBA(1.0, 0.1, 0.1, 1.0)  # Bright Red (bottom)
+                elif height_ratio < 0.5:
+                    color = ColorRGBA(1.0, 0.65, 0.1, 1.0)  # Orange
+                elif height_ratio < 0.75:
+                    color = ColorRGBA(1.0, 1.0, 0.1, 1.0)  # Yellow
                 else:
-                    # Top third: Bright cyan
-                    color = ColorRGBA(0.2, 1.0, 1.0, 1.0)
+                    color = ColorRGBA(0.1, 0.9, 0.9, 1.0)  # Cyan (top)
 
-            # Add triangle with per-vertex colors
+            # Add triangle
             marker.points.append(Point(p0[0], p0[1], p0[2]))
             marker.points.append(Point(p1[0], p1[1], p1[2]))
             marker.points.append(Point(p2[0], p2[1], p2[2]))
-
-            # All vertices get the same color for this triangle
             marker.colors.append(color)
             marker.colors.append(color)
             marker.colors.append(color)
 
             triangle_count += 1
 
-        rospy.loginfo(f"Created {triangle_count} colored 3D triangles")
+        rospy.loginfo(f"Created {triangle_count} OPTIMIZED triangles (Delaunay)")
 
         return marker
 
