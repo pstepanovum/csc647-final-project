@@ -3,6 +3,6 @@
   <!-- Launch file for RViz visualization only -->
   <!-- Use this when the processing nodes are already running -->
 
-  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find hsr_lidar_mesh)/rviz/lidar_mesh_visualization.rviz" output="screen" />
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find csc647-final-project)/rviz/lidar_mesh_visualization.rviz" output="screen" />
 
 </launch>

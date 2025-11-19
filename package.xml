@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>hsr_lidar_mesh</name>
+  <name>csc647-final-project</name>
   <version>0.1.0</version>
   <description>
     LiDAR mesh generation package for HSR robot.
