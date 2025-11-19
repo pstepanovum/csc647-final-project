@@ -177,8 +177,6 @@ class PointCloudToMesh:
         """
         marker = Marker()
         marker.header = header
-        # Override frame to use odom for easier visualization
-        marker.header.frame_id = "odom"
         marker.ns = "lidar_mesh_3d"
         marker.id = 0
         marker.type = Marker.TRIANGLE_LIST
