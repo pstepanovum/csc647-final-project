@@ -61,6 +61,9 @@ class PointCloudToMesh:
         os.makedirs(self.export_dir, exist_ok=True)
         rospy.loginfo(f"Mesh export directory: {self.export_dir}")
 
+        # Clear any old markers on startup (fixes RViz display issues)
+        self.clear_old_markers()
+
         # Subscribers - support both 2D LiDAR and 3D camera point clouds
         if self.use_3d_camera:
             # Subscribe to RGB-D camera point cloud (TRUE 3D!)
@@ -785,11 +788,14 @@ class PointCloudToMesh:
                 marker = Marker()
                 marker.header = header
                 marker.header.frame_id = "head_rgbd_sensor_link"
+                marker.header.stamp = rospy.Time.now()  # Add timestamp
                 marker.ns = "ransac_planes"
                 marker.id = plane_idx
                 marker.type = Marker.TRIANGLE_LIST  # SURFACE instead of points!
                 marker.action = Marker.ADD
                 marker.pose.orientation.w = 1.0
+                marker.lifetime = rospy.Duration(0)  # Persist until deleted
+                marker.frame_locked = True  # Lock to frame for stability
 
                 marker.scale.x = 1.0
                 marker.scale.y = 1.0
@@ -881,6 +887,40 @@ class PointCloudToMesh:
 
         rospy.loginfo(f"✓ RANSAC extracted {plane_count} planes from point cloud")
         return marker_array
+
+    def clear_old_markers(self):
+        """
+        Clear all old markers on startup to fix RViz display issues.
+
+        When marker types change (e.g., POINTS -> TRIANGLE_LIST), RViz can
+        cache old configurations. This clears them on startup.
+        """
+        rospy.loginfo("Clearing old markers...")
+
+        # Clear RANSAC planes
+        clear_array = MarkerArray()
+        for i in range(10):  # Clear up to 10 potential old markers
+            clear_marker = Marker()
+            clear_marker.header.frame_id = "head_rgbd_sensor_link"
+            clear_marker.header.stamp = rospy.Time.now()
+            clear_marker.ns = "ransac_planes"
+            clear_marker.id = i
+            clear_marker.action = Marker.DELETE
+            clear_array.markers.append(clear_marker)
+
+        self.ransac_planes_pub.publish(clear_array)
+
+        # Clear convex hull
+        clear_hull = Marker()
+        clear_hull.header.frame_id = "head_rgbd_sensor_link"
+        clear_hull.header.stamp = rospy.Time.now()
+        clear_hull.ns = "convex_hull"
+        clear_hull.id = 0
+        clear_hull.action = Marker.DELETE
+        self.convex_hull_pub.publish(clear_hull)
+
+        rospy.sleep(0.5)  # Give RViz time to process deletions
+        rospy.loginfo("✓ Old markers cleared")
 
     def run(self):
         """Run the node."""
