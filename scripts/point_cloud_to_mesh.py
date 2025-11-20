@@ -783,84 +783,30 @@ class PointCloudToMesh:
                     best_normal = normal
                     best_d = d
 
-            # If we found a good plane, visualize it as a SURFACE (not individual points!)
+            # If we found a good plane, visualize it
             if len(best_inliers) >= min_points:
                 marker = Marker()
                 marker.header = header
                 marker.header.frame_id = "head_rgbd_sensor_link"
-                marker.header.stamp = rospy.Time.now()  # Add timestamp
+                marker.header.stamp = rospy.Time.now()
                 marker.ns = "ransac_planes"
                 marker.id = plane_idx
-                marker.type = Marker.TRIANGLE_LIST  # SURFACE instead of points!
+                marker.type = Marker.POINTS
                 marker.action = Marker.ADD
                 marker.pose.orientation.w = 1.0
-                marker.lifetime = rospy.Duration(0)  # Persist until deleted
-                marker.frame_locked = True  # Lock to frame for stability
+                marker.lifetime = rospy.Duration(0)
+                marker.frame_locked = True
 
-                marker.scale.x = 1.0
-                marker.scale.y = 1.0
-                marker.scale.z = 1.0
+                marker.scale.x = 0.02  # Point size
+                marker.scale.y = 0.02
 
                 # Assign color
                 color = plane_colors[plane_idx % len(plane_colors)]
+                marker.color = color
 
-                # Create triangulated surface from plane points
-                # Project 3D points onto plane's local 2D coordinate system
-                if len(best_inliers) >= 3:
-                    # Create local coordinate system on the plane
-                    # Use plane normal as Z-axis, find two perpendicular axes
-                    if abs(best_normal[2]) < 0.9:
-                        # Use cross product with Z-axis
-                        u_axis = np.cross(best_normal, np.array([0, 0, 1]))
-                    else:
-                        # Use cross product with X-axis (when normal is nearly vertical)
-                        u_axis = np.cross(best_normal, np.array([1, 0, 0]))
-
-                    u_axis = u_axis / np.linalg.norm(u_axis)
-                    v_axis = np.cross(best_normal, u_axis)
-                    v_axis = v_axis / np.linalg.norm(v_axis)
-
-                    # Project points onto 2D plane coordinate system
-                    points_2d = np.column_stack([
-                        np.dot(best_inliers, u_axis),
-                        np.dot(best_inliers, v_axis)
-                    ])
-
-                    try:
-                        # Triangulate the plane surface
-                        tri = Delaunay(points_2d)
-
-                        # Create triangles (sample max 500 triangles per plane for performance)
-                        max_plane_triangles = 500
-                        num_triangles = min(len(tri.simplices), max_plane_triangles)
-
-                        for idx in range(num_triangles):
-                            simplex = tri.simplices[idx]
-                            p0 = best_inliers[simplex[0]]
-                            p1 = best_inliers[simplex[1]]
-                            p2 = best_inliers[simplex[2]]
-
-                            # Add triangle vertices
-                            marker.points.append(Point(p0[0], p0[1], p0[2]))
-                            marker.points.append(Point(p1[0], p1[1], p1[2]))
-                            marker.points.append(Point(p2[0], p2[1], p2[2]))
-
-                            # Same color for all 3 vertices
-                            marker.colors.append(color)
-                            marker.colors.append(color)
-                            marker.colors.append(color)
-
-                        rospy.loginfo(f"✓ Plane {plane_idx}: Created {num_triangles} triangles for surface")
-
-                    except Exception as e:
-                        rospy.logwarn(f"Plane triangulation failed: {e}, using point cloud fallback")
-                        # Fallback: just show as points if triangulation fails
-                        marker.type = Marker.POINTS
-                        marker.scale.x = 0.02
-                        marker.scale.y = 0.02
-                        marker.color = color
-                        for p in best_inliers[::5]:  # Sample every 5th point
-                            marker.points.append(Point(p[0], p[1], p[2]))
+                # Add all inlier points
+                for p in best_inliers:
+                    marker.points.append(Point(p[0], p[1], p[2]))
 
                 marker_array.markers.append(marker)
 
