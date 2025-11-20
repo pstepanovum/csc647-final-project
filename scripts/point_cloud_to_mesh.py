@@ -205,28 +205,31 @@ class PointCloudToMesh:
 
     def generate_3d_mesh_marker(self, points, header):
         """
-        Generate HIGH-PERFORMANCE 3D mesh from RGB-D camera point cloud.
+        Generate OPTIMIZED 3D mesh with random colors per triangle.
 
-        Performance Optimizations (10x faster):
+        Performance Optimizations (10x faster + reduced computational cost):
         - Delaunay triangulation on 2D projection: O(n log n)
         - VECTORIZED quality filtering (all checks in parallel)
         - NumPy batch operations instead of loops
-        - Smart sampling: 4000 points for sophisticated mesh
-        - Larger rendering distance: up to 6.0m coverage
+        - Reduced sampling: 2500 points (reduced from 4000 for performance)
+        - Random colors per triangle (lower overhead than height gradients)
 
-        Quality Parameters:
-        - Max edge length: 0.5m (increased for wider coverage)
-        - Max triangles: 15,000 (50% increase for sophistication)
-        - Min triangle area: 0.0003m² (finer detail)
-        - Max Z-variation: 0.5m (smoother surfaces)
-        - 4-tier wall gradient: red→orange→yellow→cyan
+        Quality Parameters (Optimized for performance + connectivity):
+        - Max edge length: 0.4m (better connectivity)
+        - Max triangles: 10,000 (reduced from 15k to lower computational cost)
+        - Min triangle area: 0.0005m² (balanced detail vs performance)
+        - Max Z-variation: 0.4m (tighter constraint for mesh quality)
+        - Random RGB colors: Each triangle gets unique color (alpha=0.7)
+
+        Inspired by matplotlib 3D visualization best practices for improved
+        visual coherence and mesh connectivity perception.
 
         Args:
             points (numpy.ndarray): Input 3D points
             header (std_msgs/Header): Message header
 
         Returns:
-            visualization_msgs/Marker: High-quality mesh with up to 15k triangles
+            visualization_msgs/Marker: Optimized mesh with up to 10k triangles
         """
         marker = Marker()
         marker.header = header
@@ -261,8 +264,8 @@ class PointCloudToMesh:
         z_range = z_max - z_min if z_max > z_min else 1.0
         rospy.loginfo(f"Height range: {z_min:.2f}m to {z_max:.2f}m (range: {z_range:.2f}m)")
 
-        # PERFORMANCE OPTIMIZATION: Smart sampling with better quality
-        target_points = 4000  # Increased from 3000 for more sophisticated mesh
+        # PERFORMANCE OPTIMIZATION: Reduced sampling for better performance
+        target_points = 2500  # Reduced from 4000 to lower computational cost
         if len(points) > target_points:
             step = len(points) // target_points
             sampled_points = points[::step]
@@ -283,10 +286,10 @@ class PointCloudToMesh:
             return marker
 
         # QUALITY IMPROVEMENT: Vectorized filtering for SPEED
-        max_edge_length = 0.5  # Increased from 0.35 for larger coverage
-        max_triangles = 15000  # Increased capacity for sophisticated look
-        min_triangle_area = 0.0003  # Slightly smaller for more detail
-        max_z_variation = 0.5  # Increased from 0.4 for smoother surfaces
+        max_edge_length = 0.4  # Optimized for better connectivity
+        max_triangles = 10000  # Reduced from 15000 to lower computational cost
+        min_triangle_area = 0.0005  # Balanced for detail vs performance
+        max_z_variation = 0.4  # Tighter constraint for better mesh quality
 
         # Get all triangle vertices at once (vectorized)
         p0_all = sampled_points[tri.simplices[:, 0]]
@@ -330,47 +333,17 @@ class PointCloudToMesh:
             cross = cross_all[idx]
             area = areas[idx]
 
-            # Calculate normal (already have cross product)
-            normal = cross / (2.0 * area) if area > 0 else np.array([0, 0, 1])
-
-            # Determine surface type
-            is_horizontal = abs(normal[2]) > 0.7
-
             # ═══════════════════════════════════════════════════════════════
-            # COLOR CODING SCHEME (Computational Geometry Visualization)
+            # RANDOM COLOR PER TRIANGLE (Improved Visual Coherence)
             # ═══════════════════════════════════════════════════════════════
-            # Surface classification based on normal vector analysis:
-            # - Horizontal surfaces: |normal.z| > 0.7 (angle < 45°)
-            # - Vertical surfaces: |normal.z| ≤ 0.7 (walls)
+            # Inspired by matplotlib 3D visualization best practices:
+            # Each triangle gets a unique random color for better mesh connectivity
+            # visualization and reduced computational overhead
             # ═══════════════════════════════════════════════════════════════
-            avg_z = (p0[2] + p1[2] + p2[2]) / 3.0
-            height_ratio = (avg_z - z_min) / z_range if z_range > 0 else 0.5
 
-            if is_horizontal:
-                # HORIZONTAL SURFACES (|normal.z| > 0.7)
-                if normal[2] > 0:  # Normal vector points UPWARD
-                    # ███ GREEN: Floors, tables, platforms (walkable surfaces)
-                    # Intensity gradient: darker=lower elevation, brighter=higher
-                    intensity = 0.7 + 0.3 * height_ratio
-                    color = ColorRGBA(0.1, intensity, 0.1, 1.0)
-                else:  # Normal vector points DOWNWARD
-                    # ███ BLUE: Ceilings, overhangs, top surfaces
-                    color = ColorRGBA(0.3, 0.5, 1.0, 1.0)
-            else:
-                # VERTICAL SURFACES (|normal.z| ≤ 0.7) - Walls
-                # 4-tier HEIGHT-BASED gradient (rainbow encoding for depth):
-                if height_ratio < 0.25:
-                    # ███ RED: Bottom 25% (~0.0-0.7m) - Floor level, baseboards
-                    color = ColorRGBA(1.0, 0.1, 0.1, 1.0)
-                elif height_ratio < 0.5:
-                    # ███ ORANGE: 25-50% (~0.7-1.5m) - Waist/table height
-                    color = ColorRGBA(1.0, 0.65, 0.1, 1.0)
-                elif height_ratio < 0.75:
-                    # ███ YELLOW: 50-75% (~1.5-2.2m) - Eye/door height
-                    color = ColorRGBA(1.0, 1.0, 0.1, 1.0)
-                else:
-                    # ███ CYAN: Top 25% (~2.2-3.0m) - Upper walls near ceiling
-                    color = ColorRGBA(0.1, 0.9, 0.9, 1.0)
+            # Generate random color per triangle (similar to matplotlib example)
+            random_rgb = np.random.rand(3)
+            color = ColorRGBA(random_rgb[0], random_rgb[1], random_rgb[2], 0.7)
 
             # Add triangle
             marker.points.append(Point(p0[0], p0[1], p0[2]))
