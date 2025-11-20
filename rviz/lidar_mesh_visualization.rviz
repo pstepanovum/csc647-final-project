@@ -175,6 +175,24 @@ Visualization Manager:
       Use Timestamp: false
       Value: true
 
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /lidar/convex_hull
+      Name: ConvexHull
+      Namespaces:
+        convex_hull: true
+      Queue Size: 100
+      Value: true
+
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /lidar/ransac_planes
+      Name: RANSACPlanes
+      Namespaces:
+        ransac_planes: true
+      Queue Size: 100
+      Value: true
+
     - Class: rviz/Camera
       Enabled: true
       Image Rendering: background and overlay
@@ -186,6 +204,7 @@ Visualization Manager:
       Unreliable: false
       Value: true
       Visibility:
+        ConvexHull: true
         DetectedLines: true
         Grid: false
         HoughGrid: false
@@ -194,6 +213,7 @@ Visualization Manager:
         Mesh: true
         MeshTriangles: true
         PointCloud2: false
+        RANSACPlanes: true
         RobotModel: false
         TF: false
         Value: true

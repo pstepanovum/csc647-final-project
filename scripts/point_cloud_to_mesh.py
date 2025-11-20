@@ -23,7 +23,7 @@ from sensor_msgs import point_cloud2
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
 from std_msgs.msg import ColorRGBA, String, Float32
-from scipy.spatial import Delaunay
+from scipy.spatial import Delaunay, ConvexHull
 
 
 class PointCloudToMesh:
@@ -46,6 +46,8 @@ class PointCloudToMesh:
         self.metrics_pub = rospy.Publisher('/lidar/performance_metrics', Marker, queue_size=1)
         self.area_pub = rospy.Publisher('/lidar/surface_area', Float32, queue_size=1)
         self.volume_pub = rospy.Publisher('/lidar/mesh_volume', Float32, queue_size=1)
+        self.convex_hull_pub = rospy.Publisher('/lidar/convex_hull', Marker, queue_size=1)
+        self.ransac_planes_pub = rospy.Publisher('/lidar/ransac_planes', MarkerArray, queue_size=1)
 
         # Performance tracking
         self.frame_times = []
@@ -127,6 +129,16 @@ class PointCloudToMesh:
 
             # Publish mesh
             self.mesh_pub.publish(mesh_marker)
+
+            # Compute and publish Convex Hull (only for 3D data)
+            if is_3d and len(points) >= 4:
+                hull_marker = self.compute_convex_hull(points, cloud_msg.header)
+                self.convex_hull_pub.publish(hull_marker)
+
+            # RANSAC plane segmentation (only for 3D data)
+            if is_3d and len(points) >= 200:
+                ransac_planes = self.ransac_plane_segmentation(points, cloud_msg.header)
+                self.ransac_planes_pub.publish(ransac_planes)
 
             # Calculate processing time
             processing_time = (time.time() - start_time) * 1000  # Convert to milliseconds
@@ -665,6 +677,183 @@ class PointCloudToMesh:
 
         marker.text = f"FPS: {fps:.1f} | Triangles: {num_triangles} | Time: {processing_time:.0f}ms"
         self.metrics_pub.publish(marker)
+
+    def compute_convex_hull(self, points, header):
+        """
+        Compute and visualize 3D convex hull using QuickHull algorithm.
+
+        The convex hull is the smallest convex set that contains all points.
+        Uses scipy.spatial.ConvexHull which implements QuickHull (O(n log n)).
+
+        Args:
+            points: numpy array of 3D points
+            header: ROS message header
+
+        Returns:
+            visualization_msgs/Marker: Convex hull visualization
+        """
+        marker = Marker()
+        marker.header = header
+        marker.header.frame_id = "head_rgbd_sensor_link"
+        marker.ns = "convex_hull"
+        marker.id = 0
+        marker.type = Marker.TRIANGLE_LIST
+        marker.action = Marker.ADD
+        marker.pose.orientation.w = 1.0
+
+        marker.scale.x = 1.0
+        marker.scale.y = 1.0
+        marker.scale.z = 1.0
+
+        try:
+            # Compute 3D convex hull
+            hull = ConvexHull(points)
+
+            # Visualize hull faces
+            for simplex in hull.simplices:
+                p0 = points[simplex[0]]
+                p1 = points[simplex[1]]
+                p2 = points[simplex[2]]
+
+                # Add triangle
+                marker.points.append(Point(p0[0], p0[1], p0[2]))
+                marker.points.append(Point(p1[0], p1[1], p1[2]))
+                marker.points.append(Point(p2[0], p2[1], p2[2]))
+
+                # Semi-transparent magenta for convex hull
+                marker.colors.append(ColorRGBA(1.0, 0.0, 1.0, 0.3))
+                marker.colors.append(ColorRGBA(1.0, 0.0, 1.0, 0.3))
+                marker.colors.append(ColorRGBA(1.0, 0.0, 1.0, 0.3))
+
+            rospy.loginfo(f"✓ Convex Hull: {len(hull.simplices)} faces, {len(hull.vertices)} vertices, Volume: {hull.volume:.3f}m³")
+
+        except Exception as e:
+            rospy.logwarn(f"Convex hull computation failed: {e}")
+
+        return marker
+
+    def ransac_plane_segmentation(self, points, header, max_planes=5, max_iterations=100, threshold=0.05, min_points=200):
+        """
+        RANSAC plane segmentation to extract multiple planes from point cloud.
+
+        RANSAC (Random Sample Consensus) is a robust estimation method:
+        1. Randomly sample 3 points
+        2. Fit plane through them
+        3. Count inliers (points within threshold distance)
+        4. Keep best plane, remove inliers, repeat
+
+        Args:
+            points: numpy array of 3D points
+            header: ROS message header
+            max_planes: maximum number of planes to extract
+            max_iterations: RANSAC iterations per plane
+            threshold: distance threshold for inliers (meters)
+            min_points: minimum points required for valid plane
+
+        Returns:
+            visualization_msgs/MarkerArray: Segmented planes with different colors
+        """
+        marker_array = MarkerArray()
+        remaining_points = points.copy()
+
+        # Predefined colors for different planes
+        plane_colors = [
+            ColorRGBA(0.0, 1.0, 0.0, 0.8),  # Green - typically floor
+            ColorRGBA(0.0, 0.5, 1.0, 0.8),  # Blue - typically ceiling
+            ColorRGBA(1.0, 0.5, 0.0, 0.8),  # Orange - walls
+            ColorRGBA(1.0, 0.0, 0.5, 0.8),  # Pink - walls
+            ColorRGBA(0.5, 0.0, 1.0, 0.8),  # Purple - walls
+        ]
+
+        plane_count = 0
+
+        for plane_idx in range(max_planes):
+            if len(remaining_points) < min_points:
+                break
+
+            best_inliers = []
+            best_normal = None
+            best_d = 0
+
+            # RANSAC iterations
+            for _ in range(max_iterations):
+                if len(remaining_points) < 3:
+                    break
+
+                # Randomly sample 3 points
+                sample_indices = np.random.choice(len(remaining_points), 3, replace=False)
+                p1, p2, p3 = remaining_points[sample_indices]
+
+                # Calculate plane normal: cross product of two edge vectors
+                v1 = p2 - p1
+                v2 = p3 - p1
+                normal = np.cross(v1, v2)
+                normal_mag = np.linalg.norm(normal)
+
+                if normal_mag < 0.001:  # Degenerate case
+                    continue
+
+                normal = normal / normal_mag
+                # Plane equation: normal · (p - p1) = 0  =>  normal · p + d = 0
+                d = -np.dot(normal, p1)
+
+                # Find inliers: points within threshold distance to plane
+                distances = np.abs(np.dot(remaining_points, normal) + d)
+                inlier_mask = distances < threshold
+                inliers = remaining_points[inlier_mask]
+
+                if len(inliers) > len(best_inliers):
+                    best_inliers = inliers
+                    best_normal = normal
+                    best_d = d
+
+            # If we found a good plane, visualize it
+            if len(best_inliers) >= min_points:
+                marker = Marker()
+                marker.header = header
+                marker.header.frame_id = "head_rgbd_sensor_link"
+                marker.ns = "ransac_planes"
+                marker.id = plane_idx
+                marker.type = Marker.POINTS
+                marker.action = Marker.ADD
+                marker.pose.orientation.w = 1.0
+
+                marker.scale.x = 0.02  # Point size
+                marker.scale.y = 0.02
+
+                # Assign color
+                color = plane_colors[plane_idx % len(plane_colors)]
+                marker.color = color
+
+                # Add all inlier points
+                for p in best_inliers:
+                    marker.points.append(Point(p[0], p[1], p[2]))
+
+                marker_array.markers.append(marker)
+
+                # Classify plane type based on normal
+                plane_type = "Unknown"
+                if abs(best_normal[2]) > 0.8:  # Mostly horizontal
+                    if best_normal[2] > 0:
+                        plane_type = "Floor"
+                    else:
+                        plane_type = "Ceiling"
+                else:  # Mostly vertical
+                    plane_type = "Wall"
+
+                rospy.loginfo(f"✓ RANSAC Plane {plane_idx}: {plane_type}, {len(best_inliers)} points, normal=[{best_normal[0]:.2f}, {best_normal[1]:.2f}, {best_normal[2]:.2f}]")
+
+                # Remove inliers from remaining points
+                distances = np.abs(np.dot(remaining_points, best_normal) + best_d)
+                outlier_mask = distances >= threshold
+                remaining_points = remaining_points[outlier_mask]
+
+                plane_count += 1
+            else:
+                break
+
+        rospy.loginfo(f"✓ RANSAC extracted {plane_count} planes from point cloud")
+        return marker_array
 
     def run(self):
         """Run the node."""

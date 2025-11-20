@@ -2,7 +2,7 @@
 ## LiDAR Mesh Processing Package
 
 **Course**: Computational Geometry
-**Algorithms Used**: Delaunay Triangulation, Hough Transform
+**Algorithms Used**: Delaunay Triangulation, Hough Transform, Convex Hull, RANSAC Plane Segmentation
 **Application**: 3D Environment Reconstruction from Point Clouds
 
 ---
@@ -71,6 +71,122 @@ lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180,
 - **Wall detection**: Identifies planar surfaces in environment
 - **Line primitives**: Extracts geometric features for mapping
 - **Navigation**: Detects obstacles and boundaries
+
+---
+
+### 3. **Convex Hull (QuickHull Algorithm)** (`point_cloud_to_mesh.py`)
+
+**Location**: Line 671
+```python
+hull = ConvexHull(points)  # 3D convex hull using QuickHull
+```
+
+#### Theory:
+- **Definition**: The smallest convex set that contains all given points
+- **Geometric Property**: For any two points inside the hull, the line segment connecting them lies entirely inside
+- **Algorithm**: QuickHull - divide and conquer approach (O(n log n) expected)
+- **Dual Relationship**: Related to Voronoi diagrams and Delaunay triangulations
+
+#### Implementation:
+1. Identify extreme points (min/max in each dimension)
+2. Recursively partition space using farthest points
+3. Build hull facets (triangular faces in 3D)
+4. Visualize as semi-transparent surface
+
+#### Complexity:
+- **Time**: O(n log n) expected, O(n²) worst case
+- **Space**: O(n) for storing hull facets
+
+#### Why Convex Hull?
+- **Boundary Detection**: Defines outer envelope of point cloud
+- **Volume Calculation**: Can compute enclosed volume
+- **Shape Analysis**: Provides coarse shape approximation
+- **Collision Detection**: Simplified geometry for fast intersection tests
+
+#### Visualization:
+- **Color**: Semi-transparent magenta `RGB(1.0, 0.0, 1.0, 0.3)`
+- **Type**: Triangle mesh of hull facets
+- **Info**: Logs number of faces, vertices, and enclosed volume
+
+---
+
+### 4. **RANSAC Plane Segmentation** (`point_cloud_to_mesh.py`)
+
+**Location**: Line 725
+```python
+ransac_planes = ransac_plane_segmentation(points, header, max_planes=5)
+```
+
+#### Theory:
+- **Definition**: Random Sample Consensus - robust parameter estimation in presence of outliers
+- **Concept**: Iteratively fit models to random subsets, count inliers, keep best model
+- **Robustness**: Works even with 50%+ outliers
+- **Applications**: Plane fitting, line detection, fundamental matrix estimation
+
+#### Algorithm Steps:
+1. **Random Sampling**: Select 3 random points (minimum for plane)
+2. **Model Fitting**: Compute plane equation: **n** · **p** + d = 0
+3. **Inlier Counting**: Count points within threshold distance
+4. **Model Selection**: Keep plane with most inliers
+5. **Refinement**: Remove inliers, repeat for next plane
+
+#### Implementation:
+```
+For each plane (up to max_planes):
+    best_inliers = []
+    For iteration in 1..max_iterations:
+        # Sample 3 random points
+        p1, p2, p3 = random_sample(points, 3)
+
+        # Fit plane
+        normal = normalize(cross(p2-p1, p3-p1))
+        d = -dot(normal, p1)
+
+        # Count inliers
+        distances = |dot(points, normal) + d|
+        inliers = points where distance < threshold
+
+        if len(inliers) > len(best_inliers):
+            best_inliers = inliers
+            best_normal = normal
+
+    # Visualize plane
+    publish_plane(best_inliers, color)
+    # Remove inliers from remaining points
+    points = points - best_inliers
+```
+
+#### Parameters:
+- **max_planes**: 5 (extract up to 5 dominant planes)
+- **max_iterations**: 100 (RANSAC iterations per plane)
+- **threshold**: 0.05m (5cm inlier distance)
+- **min_points**: 200 (minimum for valid plane)
+
+#### Complexity:
+- **Time**: O(k × n × m) where k=iterations, n=points, m=planes
+- **Space**: O(n) for point storage
+
+#### Plane Classification:
+Based on surface normal direction:
+- **Floor**: |normal.z| > 0.8 and normal.z > 0
+- **Ceiling**: |normal.z| > 0.8 and normal.z < 0
+- **Wall**: |normal.z| ≤ 0.8
+
+#### Color Scheme:
+| Plane Type | Color | RGB | Meaning |
+|------------|-------|-----|---------|
+| Floor (Plane 0) | Green | (0.0, 1.0, 0.0) | Horizontal, downward-facing |
+| Ceiling (Plane 1) | Blue | (0.0, 0.5, 1.0) | Horizontal, upward-facing |
+| Wall (Plane 2) | Orange | (1.0, 0.5, 0.0) | Vertical surface |
+| Wall (Plane 3) | Pink | (1.0, 0.0, 0.5) | Vertical surface |
+| Wall (Plane 4) | Purple | (0.5, 0.0, 1.0) | Vertical surface |
+
+#### Applications:
+- **Semantic Segmentation**: Label floor, walls, ceiling automatically
+- **Navigation**: Identify drivable surfaces vs obstacles
+- **Object Detection**: Find planar objects (tables, doors, windows)
+- **3D Reconstruction**: Build structured environment models
+- **Change Detection**: Detect structural modifications
 
 ---
 
