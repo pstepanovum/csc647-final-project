@@ -150,8 +150,7 @@ Visualization Manager:
       Enabled: true
       Marker Topic: /lidar/mesh_triangles
       Name: MeshTriangles
-      Namespaces:
-        {}
+      Namespaces: {}
       Queue Size: 100
       Value: true
 
@@ -195,6 +194,15 @@ Visualization Manager:
       Queue Size: 100
       Value: false
 
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /lidar/mesh_edges
+      Name: MeshEdges
+      Namespaces:
+        mesh_edges: true
+      Queue Size: 100
+      Value: true
+
     - Class: rviz/Camera
       Enabled: true
       Image Rendering: background and overlay
@@ -232,8 +240,7 @@ Visualization Manager:
       Show Arrows: true
       Show Axes: true
       Show Names: true
-      Tree:
-        {}
+      Tree: {}
       Update Interval: 0
       Value: true
 

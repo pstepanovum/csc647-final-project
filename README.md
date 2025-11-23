@@ -1,3 +1,6 @@
+python csc752-final-project-start.py
+roslaunch csc752-final-project lidar_mesh_with_isaac.launch
+
 # CSC647 Final Project - Hough Transform Plane Detection
 
 ROS package for detecting planes and lines in LiDAR data using **Hough Transform**.
