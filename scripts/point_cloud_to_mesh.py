@@ -249,13 +249,13 @@ class DelaunayMeshGenerator:
                 avg_z = (p0[2] + p1[2] + p2[2]) / 3.0
                 height_ratio = (avg_z - z_min) / z_range if z_range > 0 else 0.5
 
-                # BOLD, VIBRANT height-based gradient
+                # BOLD, VIBRANT, FULLY OPAQUE height-based gradient
                 if height_ratio < 0.33:
-                    color = ColorRGBA(0.0, 0.5, 1.0, 0.9)  # Bright cyan-blue - low
+                    color = ColorRGBA(0.0, 0.5, 1.0, 1.0)  # Bright cyan-blue - low (FULLY OPAQUE)
                 elif height_ratio < 0.66:
-                    color = ColorRGBA(0.0, 1.0, 0.5, 0.9)  # Bright green - mid
+                    color = ColorRGBA(0.0, 1.0, 0.5, 1.0)  # Bright green - mid (FULLY OPAQUE)
                 else:
-                    color = ColorRGBA(1.0, 0.5, 0.0, 0.9)  # Bright orange-red - high
+                    color = ColorRGBA(1.0, 0.5, 0.0, 1.0)  # Bright orange-red - high (FULLY OPAQUE)
 
                 # Same color for all 3 vertices of the triangle
                 marker.colors.append(color)
