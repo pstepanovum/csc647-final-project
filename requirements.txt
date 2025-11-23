@@ -1,0 +1,18 @@
+# Python dependencies for hsr_lidar_mesh package
+
+# Core scientific computing
+numpy>=1.19.0
+scipy>=1.5.0
+
+# Computer vision for Hough transform
+opencv-python>=4.5.0
+
+# ROS-related Python packages
+# Note: These are typically installed via apt, but listed here for reference
+# sensor_msgs
+# geometry_msgs
+# visualization_msgs
+# laser_geometry
+
+# For point cloud processing
+# python-pcl  # Optional, if using PCL directly instead of pcl_ros

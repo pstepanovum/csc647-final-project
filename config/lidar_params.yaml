@@ -1,0 +1,19 @@
+# LiDAR Activator Parameters
+lidar_activator:
+  scan_topic: "/hsrb/base_scan"
+  min_range: 0.1      # Minimum valid range in meters
+  max_range: 30.0     # Maximum valid range in meters
+
+# Point Cloud to Mesh Parameters
+point_cloud_to_mesh:
+  voxel_size: 0.05          # Voxel grid size for downsampling (meters)
+  max_distance: 5.0         # Maximum distance for mesh generation (meters)
+  mesh_alpha: 0.7           # Mesh transparency (0.0 to 1.0)
+
+# Hough Transform Parameters
+hough_transform_processor:
+  grid_resolution: 0.05     # Occupancy grid resolution (meters)
+  grid_size: 200            # Grid size in cells
+  hough_threshold: 50       # Minimum votes for line detection
+  min_line_length: 0.5      # Minimum line length (meters)
+  max_line_gap: 0.3         # Maximum gap between line segments (meters)
