@@ -29,8 +29,8 @@ ISAAC_WORLD_NAME = 'hsr_localization_world.py'
 ISAAC_WORLD_PATH = os.path.join(PACKAGE_PATH, ISAAC_WORLD_NAME)
 print(f'Isaac Sim world path:', ISAAC_WORLD_PATH)
 
-RVIZ_NAME = 'hsr_pf_localization_sim.rviz'
-RVIZ_PATH = os.path.join(PACKAGE_PATH, 'rviz', RVIZ_NAME)
+RVIZ_NAME = 'lidar_mesh_visualization.rviz'
+RVIZ_PATH = os.path.join(os.path.expanduser('~/hsr_robocanes_omniverse/src/csc647-final-project'), 'rviz', RVIZ_NAME)
 print(f'RVIZ path:', RVIZ_PATH)
 
 # Commands to start processes
