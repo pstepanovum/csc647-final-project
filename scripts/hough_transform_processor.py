@@ -39,6 +39,7 @@ class HoughTransformProcessor:
         self.hough_threshold = rospy.get_param('~hough_threshold', 50)  # Minimum votes for line detection
         self.min_line_length = rospy.get_param('~min_line_length', 0.5)  # Minimum line length (m)
         self.max_line_gap = rospy.get_param('~max_line_gap', 0.3)  # Maximum gap between line segments (m)
+        self.max_distance = rospy.get_param('~max_distance', 10.0)  # Maximum distance for processing (m)
 
         # Publishers
         self.lines_pub = rospy.Publisher('/lidar/detected_lines', MarkerArray, queue_size=10)
@@ -54,7 +55,10 @@ class HoughTransformProcessor:
         rospy.loginfo("Hough Transform Processor initialized")
         rospy.loginfo("Subscribing to RGB-D camera for 3D plane detection")
         rospy.loginfo(f"Grid resolution: {self.grid_resolution}m")
+        rospy.loginfo(f"Grid size: {self.grid_size} cells")
+        rospy.loginfo(f"Max distance: {self.max_distance}m")
         rospy.loginfo(f"Hough threshold: {self.hough_threshold}")
+        rospy.loginfo(f"Min line length: {self.min_line_length}m")
 
     def cloud_callback(self, cloud_msg):
         """
@@ -74,7 +78,7 @@ class HoughTransformProcessor:
 
             # Filter points by distance
             distances = np.linalg.norm(points, axis=1)
-            points = points[distances <= 5.0]  # Keep points within 5m
+            points = points[distances <= self.max_distance]  # Use configurable max_distance
 
             if len(points) < 10:
                 return
