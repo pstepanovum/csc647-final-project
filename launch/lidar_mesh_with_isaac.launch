@@ -1,10 +1,11 @@
 <?xml version="1.0"?>
 <launch>
-  <!-- Launch file for LiDAR mesh processing with Isaac Sim -->
-  <!-- Use this when running with Isaac Sim simulation -->
+  <!-- Launch file for Hough Transform plane detection with Isaac Sim -->
+  <!-- Focus: Hough Transform for line/plane detection -->
 
   <!-- Arguments -->
   <arg name="scan_topic" default="/hsrb/base_scan" />
+  <arg name="rviz" default="true" />
 
   <!-- Set use_sim_time to true for Isaac Sim -->
   <param name="use_sim_time" value="true" />
@@ -16,15 +17,14 @@
     <param name="max_range" value="30.0" />
   </node>
 
-  <!-- Point Cloud to Mesh Converter -->
-  <node name="point_cloud_to_mesh" pkg="csc647-final-project" type="point_cloud_to_mesh.py" output="screen">
-    <param name="voxel_size" value="0.025" />  <!-- Reduced to 0.025 for more detail -->
-    <param name="max_distance" value="6.0" />  <!-- Increased to 6.0m for sophisticated wide-range view -->
-    <param name="mesh_alpha" value="1.0" />
-    <param name="use_3d_camera" value="true" />  <!-- Use RGB-D camera for true 3D meshes! -->
+  <!-- Point Cloud Visualizer (Simple visualization only) -->
+  <node name="point_cloud_visualizer" pkg="csc647-final-project" type="point_cloud_to_mesh.py" output="screen">
+    <param name="voxel_size" value="0.05" />
+    <param name="max_distance" value="5.0" />
+    <param name="use_3d_camera" value="true" />
   </node>
 
-  <!-- Hough Transform Processor -->
+  <!-- Hough Transform Processor (Main algorithm for plane detection) -->
   <node name="hough_transform_processor" pkg="csc647-final-project" type="hough_transform_processor.py" output="screen">
     <param name="grid_resolution" value="0.05" />
     <param name="grid_size" value="300" />
@@ -33,7 +33,8 @@
     <param name="max_line_gap" value="0.5" />
   </node>
 
-  <!-- TF for base_link to base_scan transform (if not provided by Isaac Sim) -->
-  <!-- <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0 0 0 0 0 0 base_link base_scan 100" /> -->
+  <!-- RViz Visualization -->
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="rviz"
+        args="-d $(find csc647-final-project)/rviz/hough_transform_visualization.rviz" />
 
 </launch>
