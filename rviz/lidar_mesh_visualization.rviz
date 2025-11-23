@@ -140,9 +140,9 @@ Visualization Manager:
     - Class: rviz/Marker
       Enabled: true
       Marker Topic: /lidar/mesh
-      Name: Mesh
+      Name: DelaunayMesh
       Namespaces:
-        lidar_mesh_3d: true
+        delaunay_mesh: true
       Queue Size: 100
       Value: true
 
@@ -158,9 +158,11 @@ Visualization Manager:
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /lidar/detected_lines
-      Name: DetectedLines
+      Name: DetectedPlanes
       Namespaces:
-        {}
+        plane_xy: true
+        plane_xz: true
+        plane_yz: true
       Queue Size: 100
       Value: true
 
@@ -176,22 +178,22 @@ Visualization Manager:
       Value: true
 
     - Class: rviz/Marker
-      Enabled: true
+      Enabled: false
       Marker Topic: /lidar/convex_hull
       Name: ConvexHull
       Namespaces:
         convex_hull: true
       Queue Size: 100
-      Value: true
+      Value: false
 
     - Class: rviz/MarkerArray
-      Enabled: true
+      Enabled: false
       Marker Topic: /lidar/ransac_planes
       Name: RANSACPlanes
       Namespaces:
         ransac_planes: true
       Queue Size: 100
-      Value: true
+      Value: false
 
     - Class: rviz/Camera
       Enabled: true
