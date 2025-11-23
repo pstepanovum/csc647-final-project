@@ -136,13 +136,15 @@ Visualization Manager:
       Use rainbow: true
       Value: true
 
-    # HOUGH TRANSFORM: Detected Lines
+    # HOUGH TRANSFORM: Detected Plane Boundaries
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /lidar/detected_lines
-      Name: DetectedLines
+      Name: DetectedPlanes
       Namespaces:
-        detected_lines: true
+        plane_xy: true
+        plane_xz: true
+        plane_yz: true
       Queue Size: 100
       Value: true
 
@@ -179,12 +181,12 @@ Visualization Manager:
       Unreliable: false
       Value: true
       Visibility:
-        DetectedLines: true
+        DetectedPlanes: true
         Grid: false
         HoughGrid: true
         LaserScan: false
         Map: false
-        PointCloud2: false
+        PointCloud2: true
         PointCloudViz: false
         RobotModel: false
         TF: false
