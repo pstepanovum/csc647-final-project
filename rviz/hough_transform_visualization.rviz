@@ -160,15 +160,15 @@ Visualization Manager:
       Use Timestamp: false
       Value: true
 
-    # Simple Point Cloud Visualization
+    # DELAUNAY MESH: Triangle mesh from point cloud
     - Class: rviz/Marker
-      Enabled: false
-      Marker Topic: /lidar/point_cloud_viz
-      Name: PointCloudViz
+      Enabled: true
+      Marker Topic: /lidar/mesh
+      Name: DelaunayMesh
       Namespaces:
-        point_cloud: true
+        delaunay_mesh: true
       Queue Size: 100
-      Value: false
+      Value: true
 
     - Class: rviz/Camera
       Enabled: true
@@ -181,13 +181,13 @@ Visualization Manager:
       Unreliable: false
       Value: true
       Visibility:
+        DelaunayMesh: true
         DetectedPlanes: true
         Grid: false
         HoughGrid: true
         LaserScan: false
         Map: false
-        PointCloud2: true
-        PointCloudViz: false
+        PointCloud2: false
         RobotModel: false
         TF: false
         Value: true

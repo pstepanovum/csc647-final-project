@@ -17,8 +17,8 @@
     <param name="max_range" value="30.0" />
   </node>
 
-  <!-- Point Cloud Visualizer (Simple visualization only) -->
-  <node name="point_cloud_visualizer" pkg="csc647-final-project" type="point_cloud_to_mesh.py" output="screen">
+  <!-- Delaunay Mesh Generator (Mesh generation via Delaunay triangulation) -->
+  <node name="delaunay_mesh_generator" pkg="csc647-final-project" type="point_cloud_to_mesh.py" output="screen">
     <param name="voxel_size" value="0.05" />
     <param name="max_distance" value="5.0" />
     <param name="use_3d_camera" value="true" />

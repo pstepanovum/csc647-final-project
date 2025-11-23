@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Point Cloud Visualization Node
-===============================
-Simple point cloud visualization for LiDAR data.
-Focus on Hough Transform for plane detection (see hough_transform_processor.py).
+Delaunay Mesh Generation Node
+==============================
+Generates 3D mesh from point cloud using Delaunay triangulation.
+Pairs with Hough Transform for plane detection.
 
 Topics:
     Subscribed:
         /hsrb/head_rgbd_sensor/depth_registered/rectified_points (sensor_msgs/PointCloud2): RGB-D camera point cloud
 
     Published:
-        /lidar/point_cloud_viz (visualization_msgs/Marker): Point cloud visualization
+        /lidar/mesh (visualization_msgs/Marker): Delaunay triangulated mesh
         /lidar/stats (std_msgs/String): Processing statistics
 """
 
@@ -22,49 +22,51 @@ from sensor_msgs import point_cloud2
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point
 from std_msgs.msg import ColorRGBA, String
+from scipy.spatial import Delaunay
 
 
-class PointCloudVisualizer:
-    """Simple point cloud visualizer - pairs with Hough Transform for plane detection."""
+class DelaunayMeshGenerator:
+    """Generates mesh from point cloud using Delaunay triangulation."""
 
     def __init__(self):
-        """Initialize the point cloud visualizer node."""
-        rospy.init_node('point_cloud_visualizer', anonymous=False)
+        """Initialize the mesh generator node."""
+        rospy.init_node('delaunay_mesh_generator', anonymous=False)
 
         # Parameters
         self.voxel_size = rospy.get_param('~voxel_size', 0.05)  # Voxel grid size for downsampling
-        self.max_distance = rospy.get_param('~max_distance', 5.0)  # Max distance for visualization
+        self.max_distance = rospy.get_param('~max_distance', 5.0)  # Max distance for mesh
         self.use_3d_camera = rospy.get_param('~use_3d_camera', True)  # Use RGB-D camera point cloud
 
         # Publishers
-        self.viz_pub = rospy.Publisher('/lidar/point_cloud_viz', Marker, queue_size=10)
+        self.mesh_pub = rospy.Publisher('/lidar/mesh', Marker, queue_size=10)
         self.stats_pub = rospy.Publisher('/lidar/stats', String, queue_size=1)
 
         # Performance tracking
         self.frame_counter = 0
 
-        # Subscribers - support both 2D LiDAR and 3D camera point clouds
+        # Subscribers
         if self.use_3d_camera:
-            # Subscribe to RGB-D camera point cloud (TRUE 3D!)
+            # Subscribe to RGB-D camera point cloud
             self.cloud_sub = rospy.Subscriber(
                 '/hsrb/head_rgbd_sensor/depth_registered/rectified_points',
                 PointCloud2,
                 self.cloud_callback
             )
-            rospy.loginfo("Using RGB-D camera 3D point cloud for visualization")
+            rospy.loginfo("Using RGB-D camera 3D point cloud for mesh generation")
         else:
             # Subscribe to converted 2D LiDAR point cloud
             self.cloud_sub = rospy.Subscriber('/lidar/point_cloud', PointCloud2, self.cloud_callback)
-            rospy.loginfo("Using 2D LiDAR point cloud for visualization")
+            rospy.loginfo("Using 2D LiDAR point cloud for mesh generation")
 
-        rospy.loginfo("Point Cloud Visualizer initialized")
+        rospy.loginfo("Delaunay Mesh Generator initialized")
         rospy.loginfo(f"Voxel size: {self.voxel_size}m")
         rospy.loginfo(f"Max distance: {self.max_distance}m")
-        rospy.loginfo("For plane detection, see Hough Transform node (hough_transform_processor.py)")
+        rospy.loginfo("Mesh generation: Delaunay Triangulation")
+        rospy.loginfo("Plane detection: Hough Transform (separate node)")
 
     def cloud_callback(self, cloud_msg):
         """
-        Process incoming point cloud and visualize.
+        Process incoming point cloud and generate mesh.
 
         Args:
             cloud_msg (sensor_msgs/PointCloud2): Input point cloud
@@ -77,25 +79,25 @@ class PointCloudVisualizer:
             # Convert PointCloud2 to numpy array
             points = self.pointcloud2_to_array(cloud_msg)
 
-            if len(points) < 3:
-                rospy.logwarn("Not enough points for visualization")
+            if len(points) < 4:
+                rospy.logwarn("Not enough points for mesh generation")
                 return
 
             # Filter points by distance
             points = self.filter_by_distance(points, self.max_distance)
 
-            if len(points) < 3:
+            if len(points) < 4:
                 return
 
             # Downsample using voxel grid
             points = self.voxel_downsample(points, self.voxel_size)
 
-            if len(points) < 3:
+            if len(points) < 4:
                 return
 
-            # Create simple point cloud visualization
-            viz_marker = self.create_point_cloud_marker(points, cloud_msg.header)
-            self.viz_pub.publish(viz_marker)
+            # Generate Delaunay mesh
+            mesh_marker = self.generate_delaunay_mesh(points, cloud_msg.header)
+            self.mesh_pub.publish(mesh_marker)
 
             # Calculate processing time
             processing_time = (time.time() - start_time) * 1000  # Convert to milliseconds
@@ -105,7 +107,7 @@ class PointCloudVisualizer:
             self.stats_pub.publish(String(data=stats))
 
         except Exception as e:
-            rospy.logerr(f"Error in point cloud visualization: {e}")
+            rospy.logerr(f"Error in mesh generation: {e}")
 
     def pointcloud2_to_array(self, cloud_msg):
         """
@@ -163,55 +165,110 @@ class PointCloudVisualizer:
 
         return points[unique_indices]
 
-    def create_point_cloud_marker(self, points, header):
+    def generate_delaunay_mesh(self, points, header):
         """
-        Create a simple point cloud visualization marker.
+        Generate mesh using Delaunay triangulation.
+
+        Simple approach for CSC647:
+        1. Project 3D points to 2D (XY plane)
+        2. Run Delaunay triangulation
+        3. Lift triangles back to 3D with original Z values
+        4. Filter bad triangles (too long edges)
+        5. Color by height
 
         Args:
             points (numpy.ndarray): Input 3D points
             header (std_msgs/Header): Message header
 
         Returns:
-            visualization_msgs/Marker: Point cloud visualization
+            visualization_msgs/Marker: Triangle mesh
         """
         marker = Marker()
         marker.header = header
         marker.header.frame_id = "head_rgbd_sensor_link"
         marker.header.stamp = rospy.Time.now()
-        marker.ns = "point_cloud"
+        marker.ns = "delaunay_mesh"
         marker.id = 0
-        marker.type = Marker.POINTS
+        marker.type = Marker.TRIANGLE_LIST
         marker.action = Marker.ADD
         marker.pose.orientation.w = 1.0
         marker.lifetime = rospy.Duration(0)
 
-        # Point size
-        marker.scale.x = 0.02
-        marker.scale.y = 0.02
+        marker.scale.x = 1.0
+        marker.scale.y = 1.0
+        marker.scale.z = 1.0
 
-        # Height-based coloring
-        if len(points) > 0:
-            z_min = np.min(points[:, 2])
-            z_max = np.max(points[:, 2])
+        rospy.loginfo(f"Generating Delaunay mesh from {len(points)} points")
+
+        # Sample points if too many (for performance)
+        max_points = 2000
+        if len(points) > max_points:
+            step = len(points) // max_points
+            sampled_points = points[::step]
+        else:
+            sampled_points = points
+
+        # Project to 2D (XY plane) for Delaunay
+        points_2d = sampled_points[:, :2]
+
+        try:
+            # Run Delaunay triangulation
+            tri = Delaunay(points_2d)
+            rospy.loginfo(f"Delaunay created {len(tri.simplices)} triangles")
+
+            # Filter triangles by edge length
+            max_edge_length = 0.3  # Maximum edge length in meters
+            triangle_count = 0
+
+            # Get height range for coloring
+            z_min = np.min(sampled_points[:, 2])
+            z_max = np.max(sampled_points[:, 2])
             z_range = z_max - z_min if z_max > z_min else 1.0
 
-            for point in points:
-                # Add point
-                marker.points.append(Point(point[0], point[1], point[2]))
+            for simplex in tri.simplices:
+                # Get triangle vertices
+                p0 = sampled_points[simplex[0]]
+                p1 = sampled_points[simplex[1]]
+                p2 = sampled_points[simplex[2]]
 
-                # Color based on height (blue=low, green=mid, red=high)
-                height_ratio = (point[2] - z_min) / z_range if z_range > 0 else 0.5
+                # Check edge lengths
+                edge1 = np.linalg.norm(p1 - p0)
+                edge2 = np.linalg.norm(p2 - p1)
+                edge3 = np.linalg.norm(p0 - p2)
 
+                # Skip if any edge is too long
+                if max(edge1, edge2, edge3) > max_edge_length:
+                    continue
+
+                # Add triangle vertices
+                marker.points.append(Point(p0[0], p0[1], p0[2]))
+                marker.points.append(Point(p1[0], p1[1], p1[2]))
+                marker.points.append(Point(p2[0], p2[1], p2[2]))
+
+                # Color by average height of triangle
+                avg_z = (p0[2] + p1[2] + p2[2]) / 3.0
+                height_ratio = (avg_z - z_min) / z_range if z_range > 0 else 0.5
+
+                # Height-based gradient: blue (low) → green (mid) → red (high)
                 if height_ratio < 0.33:
-                    color = ColorRGBA(0.0, 0.0, 1.0, 1.0)  # Blue - low
+                    color = ColorRGBA(0.0, 0.0, 1.0, 0.7)  # Blue - low
                 elif height_ratio < 0.66:
-                    color = ColorRGBA(0.0, 1.0, 0.0, 1.0)  # Green - mid
+                    color = ColorRGBA(0.0, 1.0, 0.0, 0.7)  # Green - mid
                 else:
-                    color = ColorRGBA(1.0, 0.0, 0.0, 1.0)  # Red - high
+                    color = ColorRGBA(1.0, 0.0, 0.0, 0.7)  # Red - high
 
+                # Same color for all 3 vertices of the triangle
+                marker.colors.append(color)
+                marker.colors.append(color)
                 marker.colors.append(color)
 
-        rospy.loginfo_throttle(5.0, f"Visualizing {len(points)} points")
+                triangle_count += 1
+
+            rospy.loginfo(f"Created {triangle_count} valid triangles in mesh")
+
+        except Exception as e:
+            rospy.logerr(f"Delaunay triangulation failed: {e}")
+
         return marker
 
     def run(self):
@@ -221,7 +278,7 @@ class PointCloudVisualizer:
 
 if __name__ == '__main__':
     try:
-        visualizer = PointCloudVisualizer()
-        visualizer.run()
+        generator = DelaunayMeshGenerator()
+        generator.run()
     except rospy.ROSInterruptException:
         pass
